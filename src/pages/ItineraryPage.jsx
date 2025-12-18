@@ -1188,17 +1188,21 @@ useEffect(() => {
   };
 
   // 🟢 這是新的 Supabase 寫入引擎
- // 🟢 2. 儲存引擎更新
- const saveActivity = async () => {
+ // 🟢 2. 儲存引擎更新 (防重整加強版)
+const saveActivity = async (e) => { // 👈 1. 這裡加了 e
+  if (e) e.preventDefault();        // 👈 2. 這裡加了這行，強制阻止瀏覽器亂動
+
+  console.log("🚀 正在執行新版儲存功能..."); // 👈 3. 看這行有沒有印出來
+
   if (!formData.title) return alert("請輸入標題");
 
-  const newActivity = {
+  // ... (中間省略，保持你原本的設定) ...
+  const dbData = {
     day: dayId,
     time: formData.time + ":00",
     activity: formData.title,
     location: formData.location || '',
     cost: Number(formData.cost) || 0,
-    // 👇 把詳細資料寫進去
     type: formData.type || 'sightseeing',
     notes: formData.notes || '',
     trans_mode: formData.transMode || 'train',
@@ -1207,24 +1211,61 @@ useEffect(() => {
   };
 
   try {
+    let savedRecord = null;
+
     if (editItem) {
-      // 修改模式
-      const { error } = await supabase.from('itinerary').update(newActivity).eq('id', editItem.id);
+      // --- 修改模式 ---
+      const { data, error } = await supabase
+        .from('itinerary')
+        .update(dbData)
+        .eq('id', editItem.id)
+        .select();
+
       if (error) throw error;
+      savedRecord = data[0]; 
+
+      // 更新畫面
+      setActivities(prev => prev.map(a => a.id === savedRecord.id ? formatDbItem(savedRecord) : a));
       alert("✅ 修改成功！");
+
     } else {
-      // 新增模式
-      const { error } = await supabase.from('itinerary').insert([newActivity]);
+      // --- 新增模式 ---
+      const { data, error } = await supabase
+        .from('itinerary')
+        .insert([dbData])
+        .select();
+
       if (error) throw error;
+      savedRecord = data[0];
+
+      // 更新畫面
+      setActivities(prev => [...prev, formatDbItem(savedRecord)]);
       alert("🎉 新增成功！");
     }
+
     toggleModal('edit', false);
-    window.location.reload(); 
+    // 這裡絕對沒有 reload 了！
+
   } catch (error) {
     console.error("儲存失敗:", error);
     alert("儲存失敗 " + error.message);
   }
 };
+
+// 👇 這個小幫手函式幫你把 DB 格式轉回 App 格式 (請把它加在 saveActivity 上面或下面都可以)
+const formatDbItem = (item) => ({
+  id: item.id,
+  dayId: item.day,
+  time: item.time.slice(0, 5),
+  title: item.activity,
+  location: item.location,
+  cost: item.cost,
+  type: item.type || 'sightseeing',
+  notes: item.notes || '',
+  completed: item.completed || false,
+  transMode: item.trans_mode || 'train',
+  transTime: item.trans_time || ''
+});
 
 // 🟢 雲端版刪除引擎
 const deleteActivity = async () => {
